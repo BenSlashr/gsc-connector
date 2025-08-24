@@ -1,0 +1,44 @@
+{
+  "name": "gsc-connector",
+  "version": "1.0.0",
+  "description": "Google Search Console data connector microservice",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "test": "jest",
+    "lint": "eslint src/",
+    "typecheck": "echo 'No TypeScript in this project'"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "googleapis": "^126.0.1",
+    "helmet": "^7.0.0",
+    "joi": "^17.9.2",
+    "pg": "^8.11.3",
+    "redis": "^4.6.8",
+    "uuid": "^9.0.0",
+    "winston": "^3.10.0"
+  },
+  "devDependencies": {
+    "axios": "^1.11.0",
+    "eslint": "^8.47.0",
+    "jest": "^29.6.2",
+    "nodemon": "^3.0.1",
+    "supertest": "^6.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "google",
+    "search-console",
+    "seo",
+    "analytics"
+  ],
+  "author": "",
+  "license": "ISC"
+}

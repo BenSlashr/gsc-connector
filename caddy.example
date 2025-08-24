@@ -1,0 +1,56 @@
+# Configuration Caddy pour GSC Connector
+# Ajoutez cette section à votre Caddyfile principal
+
+ndd.fr {
+    # Vos autres configurations existantes...
+    
+    # GSC Connector - Microservice de connexion Google Search Console
+    handle_path /gsc-connector/* {
+        reverse_proxy gsc-connector:3000 {
+            # Headers pour le proxying
+            header_up Host {upstream_hostport}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            
+            # Timeout pour les imports GSC (peuvent être longs)
+            timeout 300s
+            
+            # Health check
+            health_uri /gsc-connector/health
+            health_interval 30s
+            health_timeout 10s
+            
+            # Retry en cas d'échec
+            fail_duration 30s
+            max_fails 3
+        }
+    }
+    
+    # Optionnel: Redirection pour l'authentification OAuth
+    handle /gsc-auth {
+        redir /gsc-connector/auth/url permanent
+    }
+    
+    # Vos autres handles...
+}
+
+# Configuration alternative si vous utilisez un sous-domaine
+gsc.ndd.fr {
+    # Dans ce cas, pas besoin de base path
+    reverse_proxy gsc-connector:3000 {
+        header_up Host {upstream_hostport}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        
+        timeout 300s
+        health_uri /health
+        health_interval 30s
+        health_timeout 10s
+    }
+}
+
+# Note: Si vous utilisez un sous-domaine, modifiez dans .env.production:
+# BASE_PATH=
+# OAUTH_REDIRECT_URI=https://gsc.ndd.fr/auth/callback
