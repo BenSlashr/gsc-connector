@@ -17,6 +17,9 @@ COPY sql/ ./sql/
 # Copier les fichiers de configuration
 COPY .env.production ./.env
 
+# Créer le fichier de stockage en mémoire (stateless)
+RUN echo "let memoryTokenStore = { tokens: null, email: null }; module.exports = memoryTokenStore;" > temp_memory_store.js
+
 # Créer un utilisateur non-root pour la sécurité
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S gsc-connector -u 1001
@@ -26,11 +29,11 @@ RUN chown -R gsc-connector:nodejs /app
 USER gsc-connector
 
 # Exposer le port
-EXPOSE 3000
+EXPOSE 8021
 
 # Variables d'environnement par défaut - Mode stateless
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=8021
 ENV BASE_PATH=/gsc-connector
 ENV SKIP_DB_SAVE=true
 ENV SKIP_DB_INIT=true
@@ -44,7 +47,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "const http = require('http'); \
     const options = { \
       host: 'localhost', \
-      port: process.env.PORT || 3000, \
+      port: process.env.PORT || 8021, \
       path: (process.env.BASE_PATH || '') + '/health', \
       timeout: 2000 \
     }; \

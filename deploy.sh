@@ -36,7 +36,7 @@ echo "🚀 Étape 4: Démarrage du nouveau conteneur"
 docker run -d \
   --name $CONTAINER_NAME \
   --restart unless-stopped \
-  -p 3000:3000 \
+  -p 8021:8021 \
   -e NODE_ENV=production \
   -e BASE_PATH=/gsc-connector \
   $IMAGE_NAME
@@ -45,13 +45,13 @@ echo "⏳ Attente du démarrage..."
 sleep 10
 
 echo "🔍 Étape 5: Vérification"
-if curl -f -s http://localhost:3000/gsc-connector/health > /dev/null; then
+if curl -f -s http://localhost:8021/gsc-connector/health > /dev/null; then
     echo "✅ Service accessible"
 else
-    echo "⚠️  Health check échoué (normal sans DB)"
+    echo "⚠️  Health check échoué"
 fi
 
-if curl -f -s http://localhost:3000/gsc-connector/ > /dev/null; then
+if curl -f -s http://localhost:8021/gsc-connector/ > /dev/null; then
     echo "✅ Endpoint racine accessible"
 else
     echo "❌ Endpoint racine inaccessible"
@@ -61,15 +61,15 @@ fi
 echo "📊 Étape 6: Informations du déploiement"
 echo "Container ID: $(docker ps -q -f name=$CONTAINER_NAME)"
 echo "Image: $IMAGE_NAME"
-echo "Port: 3000"
+echo "Port: 8021"
 echo "Base Path: /gsc-connector"
 
 echo ""
 echo "🎯 Déploiement terminé avec succès!"
 echo "📝 Endpoints disponibles:"
-echo "   - Root: http://localhost:3000/gsc-connector/"
-echo "   - Health: http://localhost:3000/gsc-connector/health"
-echo "   - Auth: http://localhost:3000/gsc-connector/auth/url"
+echo "   - Root: http://localhost:8021/gsc-connector/"
+echo "   - Health: http://localhost:8021/gsc-connector/health"
+echo "   - Auth: http://localhost:8021/gsc-connector/auth/url"
 echo ""
 echo "📋 Commandes utiles:"
 echo "   - Logs: docker logs -f $CONTAINER_NAME"

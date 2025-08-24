@@ -6,7 +6,7 @@ ndd.fr {
     
     # GSC Connector - Microservice de connexion Google Search Console
     handle_path /gsc-connector/* {
-        reverse_proxy gsc-connector:3000 {
+        reverse_proxy gsc-connector:8021 {
             # Headers pour le proxying
             header_up Host {upstream_hostport}
             header_up X-Real-IP {remote_host}
@@ -38,7 +38,7 @@ ndd.fr {
 # Configuration alternative si vous utilisez un sous-domaine
 gsc.ndd.fr {
     # Dans ce cas, pas besoin de base path
-    reverse_proxy gsc-connector:3000 {
+    reverse_proxy gsc-connector:8021 {
         header_up Host {upstream_hostport}
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}

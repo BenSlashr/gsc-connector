@@ -90,16 +90,17 @@ services:
     image: gsc-connector:latest
     container_name: gsc-connector
     restart: unless-stopped
+    ports:
+      - "8021:8021"
     environment:
       - NODE_ENV=production
       - BASE_PATH=/gsc-connector
+      - PORT=8021
     networks:
       - seo-tools-network
-    depends_on:
-      - postgres  # si vous utilisez PostgreSQL
-      - redis     # si vous utilisez Redis
+    # Mode stateless - plus besoin de PostgreSQL/Redis
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/gsc-connector/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8021/gsc-connector/health"]
       interval: 30s
       timeout: 10s
       retries: 3
