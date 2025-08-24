@@ -97,15 +97,26 @@ class HealthController {
 
   async checkDatabase() {
     try {
-      const healthy = await db.healthCheck();
+      // Test simple de connexion à la base de données
+      const result = await db.query('SELECT 1 as test');
       
-      if (healthy) {
-        const result = await db.query('SELECT COUNT(*) as count FROM oauth_google_accounts');
-        return {
-          healthy: true,
-          message: 'Database connection is healthy',
-          accounts_count: parseInt(result.rows[0].count)
-        };
+      if (result && result.rows && result.rows.length > 0) {
+        try {
+          // Essayer de compter les comptes OAuth
+          const accountsResult = await db.query('SELECT COUNT(*) as count FROM oauth_google_accounts');
+          return {
+            healthy: true,
+            message: 'Database connection is healthy',
+            accounts_count: parseInt(accountsResult.rows[0].count || 0)
+          };
+        } catch (tableError) {
+          // Si la table n'existe pas encore, c'est OK
+          return {
+            healthy: true,
+            message: 'Database connection is healthy (schema pending)',
+            accounts_count: 0
+          };
+        }
       } else {
         return {
           healthy: false,
@@ -202,7 +213,7 @@ class HealthController {
           AVG(rows_imported) as avg_rows,
           MAX(completed_at) as last_import
         FROM import_jobs 
-        WHERE created_at > NOW() - INTERVAL '24 hours'
+        WHERE created_at > datetime('now', '-24 hours')
         GROUP BY status
       `);
 

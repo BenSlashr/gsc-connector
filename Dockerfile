@@ -28,10 +28,13 @@ USER gsc-connector
 # Exposer le port
 EXPOSE 3000
 
-# Variables d'environnement par défaut
+# Variables d'environnement par défaut - Mode stateless
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV BASE_PATH=/gsc-connector
+ENV SKIP_DB_SAVE=true
+ENV SKIP_DB_INIT=true
+ENV SKIP_REDIS=true
 
 # Commande de démarrage
 CMD ["node", "src/app.js"]

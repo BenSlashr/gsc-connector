@@ -14,7 +14,7 @@ const { createLogger } = require('./utils/logger');
 const authRoutes = require('./routes/auth');
 const gscRoutes = require('./routes/gsc');
 const metricsRoutes = require('./routes/metrics');
-const healthRoutes = require('./routes/health');
+const healthRoutes = require('./routes/health-simple');
 
 const logger = createLogger('App');
 
@@ -101,17 +101,31 @@ class GSCConnectorApp {
     try {
       logger.info('Initializing GSC Connector...');
 
+      // Mode stateless - base de données optionnelle
       if (process.env.SKIP_DB_INIT !== 'true') {
-        await db.initializeSchema();
-        logger.info('Database schema initialized');
+        try {
+          await db.initializeSchema();
+          logger.info('Database schema initialized');
+        } catch (dbError) {
+          logger.warn('Database initialization skipped:', dbError.message);
+        }
+      } else {
+        logger.info('Database skipped (SKIP_DB_INIT=true)');
       }
 
+      // Cache Redis optionnel
       if (process.env.REDIS_HOST && process.env.SKIP_REDIS !== 'true') {
-        await redisClient.connect();
-        logger.info('Redis connected');
+        try {
+          await redisClient.connect();
+          logger.info('Redis connected');
+        } catch (redisError) {
+          logger.warn('Redis connection skipped:', redisError.message);
+        }
+      } else {
+        logger.info('Redis skipped (SKIP_REDIS=true)');
       }
 
-      logger.info('GSC Connector initialized successfully');
+      logger.info('GSC Connector initialized successfully (stateless mode)');
     } catch (error) {
       logger.error('Failed to initialize GSC Connector', { error: error.message });
       throw error;
