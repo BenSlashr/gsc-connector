@@ -105,34 +105,76 @@ class GSCService {
       let totalRowsImported = 0;
       let allData = []; // Collect all data for stateless mode
 
+      // Generate array of dates to process
+      const dates = [];
       for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
-        const dateStr = date.toISOString().split('T')[0];
-        logger.info(`Importing data for ${dateStr}`);
+        dates.push(date.toISOString().split('T')[0]);
+      }
 
-        const dayData = await this.fetchDayData(property, dateStr, dimensions, searchType, dataState, filters);
+      logger.info(`Processing ${dates.length} days in parallel batches`, { property, dates: dates.length });
+
+      // Process dates in parallel batches of 3
+      const BATCH_SIZE = 3;
+      for (let i = 0; i < dates.length; i += BATCH_SIZE) {
+        const batch = dates.slice(i, i + BATCH_SIZE);
         
-        if (dayData.length > 0) {
-          const normalizedData = dayData.map(row => ({
-            ...row,
-            pageNormalized: normalizeUrl(row.pageRaw, property)
-          }));
+        logger.info(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(dates.length / BATCH_SIZE)}`, { 
+          dates: batch, 
+          property 
+        });
 
-          let rowsForThisDay = 0;
-          if (!process.env.SKIP_DB_SAVE) {
-            rowsForThisDay = await SearchAnalytics.bulkInsert(normalizedData);
-            totalRowsImported += rowsForThisDay;
-          } else {
-            // For stateless mode, collect data and count rows
-            allData.push(...normalizedData);
-            rowsForThisDay = normalizedData.length;
-            totalRowsImported += rowsForThisDay;
-            logger.info(`Collected ${rowsForThisDay} rows for ${dateStr} (stateless mode)`);
+        // Process batch in parallel
+        const batchPromises = batch.map(async (dateStr) => {
+          try {
+            logger.info(`Fetching data for ${dateStr}`);
+            
+            const dayData = await this.fetchDayData(property, dateStr, dimensions, searchType, dataState, filters);
+            
+            if (dayData.length > 0) {
+              const normalizedData = dayData.map(row => ({
+                ...row,
+                pageNormalized: normalizeUrl(row.pageRaw, property)
+              }));
+
+              logger.info(`Fetched ${normalizedData.length} rows for ${dateStr}`);
+              return { dateStr, data: normalizedData };
+            }
+            
+            return { dateStr, data: [] };
+          } catch (error) {
+            logger.error(`Failed to fetch data for ${dateStr}`, { error: error.message, property });
+            throw error;
           }
-          
-          logger.info(`Processed ${rowsForThisDay} rows for ${dateStr}`);
+        });
+
+        // Wait for all days in this batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        
+        // Process results
+        for (const { dateStr, data: normalizedData } of batchResults) {
+          if (normalizedData.length > 0) {
+            let rowsForThisDay = normalizedData.length;
+            
+            if (!process.env.SKIP_DB_SAVE) {
+              const insertedRows = await SearchAnalytics.bulkInsert(normalizedData);
+              totalRowsImported += insertedRows;
+            } else {
+              // For stateless mode, collect data and count rows
+              allData.push(...normalizedData);
+              totalRowsImported += rowsForThisDay;
+              logger.info(`Collected ${rowsForThisDay} rows for ${dateStr} (stateless mode)`);
+            }
+            
+            logger.info(`Processed ${rowsForThisDay} rows for ${dateStr}`);
+          }
         }
 
-        await this.delay(100);
+        // Longer delay between batches to avoid rate limiting
+        if (i + BATCH_SIZE < dates.length) {
+          const batchDelay = Math.min(2000, 500 + (totalRowsImported / 1000));
+          logger.info(`Batch completed, waiting ${batchDelay}ms before next batch`);
+          await this.delay(batchDelay);
+        }
       }
 
       if (!process.env.SKIP_DB_SAVE) {
@@ -261,8 +303,10 @@ class GSCService {
       }
 
       if (hasMoreData) {
-        // Adaptive delay: longer for large datasets to avoid rate limiting
-        const delay = allRows.length > 100000 ? 500 : 200;
+        // Adaptive delay: longer for large datasets and when running in parallel
+        const baseDelay = allRows.length > 100000 ? 500 : 200;
+        const parallelDelay = Math.random() * 100; // Random jitter for parallel requests
+        const delay = baseDelay + parallelDelay;
         await this.delay(delay);
       }
     }
