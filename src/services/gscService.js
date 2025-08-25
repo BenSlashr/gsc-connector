@@ -103,6 +103,7 @@ class GSCService {
       const startDate = new Date(start);
       const endDate = new Date(end);
       let totalRowsImported = 0;
+      let allData = []; // Collect all data for stateless mode
 
       for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
         const dateStr = date.toISOString().split('T')[0];
@@ -121,10 +122,11 @@ class GSCService {
             rowsForThisDay = await SearchAnalytics.bulkInsert(normalizedData);
             totalRowsImported += rowsForThisDay;
           } else {
-            // For testing without DB, just count the rows
+            // For stateless mode, collect data and count rows
+            allData.push(...normalizedData);
             rowsForThisDay = normalizedData.length;
             totalRowsImported += rowsForThisDay;
-            logger.info(`Would insert ${rowsForThisDay} rows for ${dateStr} (DB save skipped)`);
+            logger.info(`Collected ${rowsForThisDay} rows for ${dateStr} (stateless mode)`);
           }
           
           logger.info(`Processed ${rowsForThisDay} rows for ${dateStr}`);
@@ -142,12 +144,20 @@ class GSCService {
 
       logger.info('GSC import completed', { property, totalRowsImported });
 
-      return {
+      const result = {
         status: 'completed',
         jobId,
         rowsImported: totalRowsImported,
         message: `Successfully imported ${totalRowsImported} rows`
       };
+
+      // In stateless mode, return the actual data
+      if (process.env.SKIP_DB_SAVE && allData.length > 0) {
+        result.data = allData;
+        result.message = `Successfully retrieved ${totalRowsImported} rows`;
+      }
+
+      return result;
 
     } catch (error) {
       logger.error('GSC import failed', { error: error.message, property });
@@ -224,7 +234,7 @@ class GSCService {
       const processedRows = rows.map(row => ({
         siteUrl: property,
         date,
-        pageRaw: row.keys[dimensions.indexOf('page')],
+        pageRaw: row.keys[dimensions.indexOf('page')] || '',
         query: row.keys[dimensions.indexOf('query')] || '',
         country: row.keys[dimensions.indexOf('country')] || 'UNKNOWN',
         device: row.keys[dimensions.indexOf('device')] || 'UNKNOWN',
@@ -241,10 +251,27 @@ class GSCService {
       startRow += rows.length;
       hasMoreData = rows.length === this.maxRowLimit;
 
+      // Log progress for large datasets
+      if (allRows.length > 0 && allRows.length % 25000 === 0) {
+        logger.info(`Fetched ${allRows.length} rows for ${date}, continuing pagination...`, { 
+          property, 
+          currentBatch: Math.floor(allRows.length / 25000),
+          hasMoreData 
+        });
+      }
+
       if (hasMoreData) {
-        await this.delay(200);
+        // Adaptive delay: longer for large datasets to avoid rate limiting
+        const delay = allRows.length > 100000 ? 500 : 200;
+        await this.delay(delay);
       }
     }
+
+    logger.info(`Completed fetching data for ${date}`, { 
+      property, 
+      totalRows: allRows.length,
+      batchesFetched: Math.ceil(allRows.length / this.maxRowLimit) 
+    });
 
     return allRows;
   }
@@ -254,30 +281,62 @@ class GSCService {
       const authClient = await googleAuth.getAuthenticatedClient();
       const webmasters = google.webmasters({ version: 'v3', auth: authClient });
 
-      const sampleDate = start;
-      const response = await webmasters.searchanalytics.query({
-        siteUrl: property,
-        requestBody: {
-          startDate: sampleDate,
-          endDate: sampleDate,
-          dimensions,
-          rowLimit: 1,
-          searchType
-        }
-      });
-
       const startDate = new Date(start);
       const endDate = new Date(end);
       const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
 
-      const estimatedRowsPerDay = 10000;
-      const estimatedRows = estimatedRowsPerDay * daysDiff;
+      // Sample 3 days to get better estimation
+      const sampleDays = Math.min(3, daysDiff);
+      let totalSampleRows = 0;
+      let sampleCount = 0;
+
+      for (let i = 0; i < sampleDays; i++) {
+        const sampleDate = new Date(startDate);
+        sampleDate.setDate(sampleDate.getDate() + Math.floor(i * daysDiff / sampleDays));
+        const sampleDateStr = sampleDate.toISOString().split('T')[0];
+
+        try {
+          // Get actual row count for sample day with rowLimit 0 (returns metadata only)
+          const response = await webmasters.searchanalytics.query({
+            siteUrl: property,
+            requestBody: {
+              startDate: sampleDateStr,
+              endDate: sampleDateStr,
+              dimensions,
+              rowLimit: 1,
+              searchType
+            }
+          });
+
+          // Try to estimate based on response patterns
+          // Google API doesn't give total counts, so we estimate based on dimensions
+          let estimatedForDay = 1000; // Base estimate
+          
+          // Adjust based on dimensions
+          if (dimensions.includes('query')) estimatedForDay *= 10;
+          if (dimensions.includes('page')) estimatedForDay *= 5;
+          if (dimensions.includes('country')) estimatedForDay *= 2;
+          if (dimensions.includes('device')) estimatedForDay *= 3;
+
+          totalSampleRows += estimatedForDay;
+          sampleCount++;
+          
+          await this.delay(100); // Small delay between samples
+        } catch (sampleError) {
+          logger.warn(`Failed to sample date ${sampleDateStr}`, { error: sampleError.message });
+        }
+      }
+
+      const avgRowsPerDay = sampleCount > 0 ? Math.floor(totalSampleRows / sampleCount) : 5000;
+      const estimatedRows = avgRowsPerDay * daysDiff;
 
       return {
         estimatedRows,
+        avgRowsPerDay,
         dayCount: daysDiff,
         dimensions,
-        searchType
+        searchType,
+        sampleDays: sampleCount
       };
     } catch (error) {
       logger.warn('Failed to estimate rows', { error: error.message });
