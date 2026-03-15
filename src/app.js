@@ -1,3 +1,13 @@
+const Sentry = require('@sentry/node');
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    tracesSampleRate: 0.1,
+    environment: 'production',
+    serverName: 'gsc-connector',
+  });
+}
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -15,6 +25,7 @@ const authRoutes = require('./routes/auth');
 const gscRoutes = require('./routes/gsc');
 const metricsRoutes = require('./routes/metrics');
 const healthRoutes = require('./routes/health-simple');
+const docsRoutes = require('./routes/docs');
 
 const logger = createLogger('App');
 
@@ -56,6 +67,7 @@ class GSCConnectorApp {
         status: 'running',
         basePath: this.basePath,
         endpoints: [
+          `GET ${this.basePath}/docs - API documentation`,
           `GET ${this.basePath}/health - Health check`,
           `GET ${this.basePath}/ready - Readiness check`,
           `GET ${this.basePath}/metrics - Service metrics`,
@@ -73,7 +85,8 @@ class GSCConnectorApp {
 
     // Health and monitoring routes
     this.app.use(this.basePath, healthRoutes);
-    
+    this.app.use(this.basePath, docsRoutes);
+
     this.app.use(this.basePath + '/auth', authRoutes);
     this.app.use(this.basePath + '/gsc', gscRoutes);
     this.app.use(this.basePath + '/metrics', cacheMiddleware(), metricsRoutes);
